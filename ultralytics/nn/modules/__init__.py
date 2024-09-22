@@ -53,6 +53,9 @@ from .block import (
     RepVGGDW,
     ResNetLayer,
     SCDown,
+    DenseNetLayer,
+    DenseBlock,
+    TransitionLayer,
 )
 from .conv import (
     CBAM,
@@ -150,4 +153,7 @@ __all__ = (
     "Attention",
     "PSA",
     "SCDown",
+    "DenseNetLayer",
+    "DenseBlock",
+    "TransitionLayer",
 )

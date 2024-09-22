@@ -1,0 +1,29 @@
+# YOLOv8-cls with DenseNet121 backbone for image classification
+# For Usage examples see https://docs.ultralytics.com/tasks/classify
+
+# Parameters
+nc: 1000  # number of classes (update based on your dataset)
+scales:  # model compound scaling constants (n, s, m, l, x)
+  n: [0.33, 0.25, 1024]
+  s: [0.33, 0.50, 1024]
+  m: [0.67, 0.75, 1024]
+  l: [1.00, 1.00, 1024]
+  x: [1.00, 1.25, 1024]
+
+# DenseNet121 backbone
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, DenseNetLayer, [64, 32, 1, True]]  # 0-Initial convolution
+  - [-1, 1, DenseBlock, [32, 6]]  # 1-Dense block 1 (6 layers)
+  - [-1, 1, TransitionLayer, [32]]  # 2-Transition layer 1
+  - [-1, 1, DenseBlock, [64, 12]]  # 3-Dense block 2 (12 layers)
+  - [-1, 1, TransitionLayer, [64]]  # 4-Transition layer 2
+  - [-1, 1, DenseBlock, [128, 24]]  # 5-Dense block 3 (24 layers)
+  - [-1, 1, TransitionLayer, [128]]  # 6-Transition layer 3
+  - [-1, 1, DenseBlock, [256, 16]]  # 7-Dense block 4 (16 layers)
+  - [-1, 1, TransitionLayer, [256]]  # 8-Transition layer 4 (output feature map)
+
+# YOLOv8 DenseNet head
+head:
+  - [-1, 1, Classify, [nc]]  # Classify
+

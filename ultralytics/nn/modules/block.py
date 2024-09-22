@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
 
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
@@ -45,8 +46,69 @@ __all__ = (
     "C2fCIB",
     "Attention",
     "PSA",
-    "SCDown",
+    "SCDown", 
+    "DenseNetLayer",
+    "DenseBlock",
+    "TransitionLayer",
 )
+
+class DenseNetLayer(nn.Module):
+    def __init__(self, version='densenet121', pretrained=True):
+        super(DenseNetLayer, self).__init__()
+        if version == 'densenet121':
+            # Load pretrained DenseNet121
+            densenet = models.densenet121(pretrained=pretrained)
+        elif version == 'densenet169':
+            # Optionally support other versions
+            densenet = models.densenet169(pretrained=pretrained)
+        else:
+            raise ValueError(f"{version} not implemented")
+        
+        # Extract features (DenseNet has a feature extraction part and a classification head)
+        self.features = densenet.features  # Use only the feature extraction part
+
+    def forward(self, x):
+        # Pass input through DenseNet feature extractor
+        x = self.features(x)
+        return x
+
+class DenseBlock(nn.Module):
+    def __init__(self, in_channels, growth_rate, layers):
+        super(DenseBlock, self).__init__()
+        self.layers = nn.ModuleList()
+        for i in range(layers):
+            self.layers.append(DenseLayer(in_channels + i * growth_rate, growth_rate))
+
+    def forward(self, x):
+        for layer in self.layers:
+            new_features = layer(x)
+            x = torch.cat([x, new_features], 1)  # Concatenate input with new features
+        return x
+
+class DenseLayer(nn.Module):
+    def __init__(self, in_channels, growth_rate):
+        super(DenseLayer, self).__init__()
+        self.bn1 = nn.BatchNorm2d(in_channels)
+        self.conv1 = nn.Conv2d(in_channels, growth_rate, kernel_size=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(growth_rate)
+        self.conv2 = nn.Conv2d(growth_rate, growth_rate, kernel_size=3, padding=1, bias=False)
+        
+    def forward(self, x):
+        x = self.conv1(F.relu(self.bn1(x)))
+        x = self.conv2(F.relu(self.bn2(x)))
+        return x
+
+class TransitionLayer(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(TransitionLayer, self).__init__()
+        self.bn = nn.BatchNorm2d(in_channels)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
+
+    def forward(self, x):
+        x = self.conv(F.relu(self.bn(x)))
+        x = self.pool(x)
+        return x
 
 
 class DFL(nn.Module):
