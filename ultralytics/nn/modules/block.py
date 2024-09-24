@@ -46,8 +46,32 @@ __all__ = (
     "Attention",
     "PSA",
     "SCDown",
+    "SobelFilter",
 )
 
+class SobelFilter(nn.Module):
+    def __init__(self):
+        super(SobelFilter, self).__init__()
+        # Define Sobel kernels for horizontal and vertical edge detection
+        sobel_kernel_x = [[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]
+        sobel_kernel_y = [[-1., -2., -1.], [0., 0., 0.], [1., 2., 1.]]
+
+        # Convert to PyTorch tensor
+        sobel_kernel_x = torch.FloatTensor(sobel_kernel_x).unsqueeze(0).unsqueeze(0)
+        sobel_kernel_y = torch.FloatTensor(sobel_kernel_y).unsqueeze(0).unsqueeze(0)
+
+        # Register the filters as fixed parameters (not learnable)
+        self.sobel_kernel_x = nn.Parameter(sobel_kernel_x, requires_grad=False)
+        self.sobel_kernel_y = nn.Parameter(sobel_kernel_y, requires_grad=False)
+
+    def forward(self, x):
+        # Apply Sobel filter for both x and y directions
+        edge_x = F.conv2d(x, self.sobel_kernel_x, padding=1)
+        edge_y = F.conv2d(x, self.sobel_kernel_y, padding=1)
+
+        # Combine the edges from both x and y directions
+        edge_magnitude = torch.sqrt(edge_x ** 2 + edge_y ** 2)
+        return edge_magnitude
 
 class DFL(nn.Module):
     """
@@ -193,10 +217,12 @@ class C1(nn.Module):
         super().__init__()
         self.cv1 = Conv(c1, c2, 1, 1)
         self.m = nn.Sequential(*(Conv(c2, c2, 3) for _ in range(n)))
+        self.sobel = SobelFilter()
 
     def forward(self, x):
         """Applies cross-convolutions to input in the C3 module."""
         y = self.cv1(x)
+        y = self.sobel(y)
         return self.m(y) + y
 
 
