@@ -52,7 +52,7 @@ __all__ = (
 class SobelFilter(nn.Module):
     def __init__(self):
         super(SobelFilter, self).__init__()
-        # Define Sobel kernels for horizontal and vertical edge detection
+        # Sobel kernels for horizontal and vertical edge detection
         sobel_kernel_x = [[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]
         sobel_kernel_y = [[-1., -2., -1.], [0., 0., 0.], [1., 2., 1.]]
 
@@ -65,9 +65,21 @@ class SobelFilter(nn.Module):
         self.sobel_kernel_y = nn.Parameter(sobel_kernel_y, requires_grad=False)
 
     def forward(self, x):
-        # Apply Sobel filter for both x and y directions
-        edge_x = F.conv2d(x, self.sobel_kernel_x, padding=1)
-        edge_y = F.conv2d(x, self.sobel_kernel_y, padding=1)
+        # Check the number of channels in the input
+        b, c, h, w = x.size()
+
+        # Apply the Sobel filter to each channel individually
+        edges_x = []
+        edges_y = []
+        for i in range(c):
+            edge_x = F.conv2d(x[:, i:i+1, :, :], self.sobel_kernel_x, padding=1)
+            edge_y = F.conv2d(x[:, i:i+1, :, :], self.sobel_kernel_y, padding=1)
+            edges_x.append(edge_x)
+            edges_y.append(edge_y)
+
+        # Concatenate the edges for all channels
+        edge_x = torch.cat(edges_x, dim=1)
+        edge_y = torch.cat(edges_y, dim=1)
 
         # Combine the edges from both x and y directions
         edge_magnitude = torch.sqrt(edge_x ** 2 + edge_y ** 2)
