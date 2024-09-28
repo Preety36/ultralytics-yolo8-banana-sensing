@@ -56,6 +56,8 @@ from ultralytics.nn.modules import (
     WorldDetect,
     v10Detect,
     SobelFilter,
+    SpatialAttention,
+    SelfAttention,
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
@@ -903,6 +905,10 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
         m = getattr(torch.nn, m[3:]) if "nn." in m else globals()[m]  # get module
+        if m == "SpatialAttention":
+            m = SpatialAttention
+        elif m == "SelfAttention":
+            m = SelfAttention
         for j, a in enumerate(args):
             if isinstance(a, str):
                 with contextlib.suppress(ValueError):
