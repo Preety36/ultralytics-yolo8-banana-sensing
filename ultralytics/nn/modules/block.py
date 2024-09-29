@@ -48,21 +48,24 @@ __all__ = (
     "SCDown",
     "SobelFilter",
     "SpatialAttention",
-    "SelfAttention",
+    "SobelFilter",
 )
 
 class SpatialAttention(nn.Module):
     def __init__(self, kernel_size=7):
         super(SpatialAttention, self).__init__()
-        self.conv = nn.Conv2d(2, 1, kernel_size=kernel_size, padding=kernel_size//2, bias=False)
+        self.conv = nn.Conv2d(2, 1, kernel_size=kernel_size, padding=kernel_size // 2, bias=False)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         avg_out = torch.mean(x, dim=1, keepdim=True)
         max_out, _ = torch.max(x, dim=1, keepdim=True)
-        x = torch.cat([avg_out, max_out], dim=1)
-        x = self.conv(x)
-        return self.sigmoid(x)
+        attention_map = torch.cat([avg_out, max_out], dim=1)  # [batch_size, 2, H, W]
+        attention_map = self.conv(attention_map)  # [batch_size, 1, H, W]
+        attention_map = self.sigmoid(attention_map)  # [batch_size, 1, H, W]
+        
+        # Multiply the attention map by the original input, preserving the original channels
+        return x * attention_map  # Element-wise multiplication to preserve channels
 
 class SelfAttention(nn.Module):
     def __init__(self, in_channels):
@@ -84,6 +87,7 @@ class SelfAttention(nn.Module):
         out = out.view(batch, channels, height, width)
 
         return out + x  # Residual connection
+
 
 
 class SobelFilter(nn.Module):
