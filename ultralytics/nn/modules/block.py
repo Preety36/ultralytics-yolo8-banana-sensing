@@ -52,20 +52,29 @@ __all__ = (
 )
 
 class SpatialAttention(nn.Module):
-    def __init__(self, kernel_size=7):
+    def __init__(self, in_channels, kernel_size=7):
         super(SpatialAttention, self).__init__()
         self.conv = nn.Conv2d(2, 1, kernel_size=kernel_size, padding=kernel_size // 2, bias=False)
         self.sigmoid = nn.Sigmoid()
 
+        # Add a conv layer to restore the number of channels after attention
+        self.restore_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+
     def forward(self, x):
-        avg_out = torch.mean(x, dim=1, keepdim=True)
-        max_out, _ = torch.max(x, dim=1, keepdim=True)
-        attention_map = torch.cat([avg_out, max_out], dim=1)  # [batch_size, 2, H, W]
-        attention_map = self.conv(attention_map)  # [batch_size, 1, H, W]
-        attention_map = self.sigmoid(attention_map)  # [batch_size, 1, H, W]
+        avg_out = torch.mean(x, dim=1, keepdim=True)  # Average pooling
+        max_out, _ = torch.max(x, dim=1, keepdim=True)  # Max pooling
+        attention_map = torch.cat([avg_out, max_out], dim=1)  # Concatenate along channel dimension
+        attention_map = self.conv(attention_map)  # 2 channels -> 1 channel
+        attention_map = self.sigmoid(attention_map)  # Apply sigmoid to get the attention map
         
-        # Multiply the attention map by the original input, preserving the original channels
-        return x * attention_map  # Element-wise multiplication to preserve channels
+        # Element-wise multiply the attention map with the original input (broadcasting across channels)
+        x = x * attention_map
+        
+        # Pass through a 1x1 convolution to restore the original number of channels
+        x = self.restore_conv(x)
+
+        return x
+
 
 class SelfAttention(nn.Module):
     def __init__(self, in_channels):
