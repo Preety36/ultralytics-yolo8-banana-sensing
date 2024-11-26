@@ -54,7 +54,7 @@ from .block import (
     ResNetLayer,
     SCDown,
     SobelFilter,
-    SpatialAttention,
+    CustomSpatialAttention,
     SelfAttention,
 )
 from .conv import (
@@ -154,6 +154,6 @@ __all__ = (
     "PSA",
     "SCDown",
     "SobelFilter",
-    "SpatialAttention",
+    "CustomSpatialAttention",
     "SelfAttention",
 )

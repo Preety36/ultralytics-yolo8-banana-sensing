@@ -47,34 +47,66 @@ __all__ = (
     "PSA",
     "SCDown",
     "SobelFilter",
-    "SpatialAttention",
+    "CustomSpatialAttention",
     "SobelFilter",
 )
 
-class SpatialAttention(nn.Module):
-    def __init__(self, in_channels, kernel_size=7):
-        super(SpatialAttention, self).__init__()
-        self.conv = nn.Conv2d(2, 1, kernel_size=kernel_size, padding=kernel_size // 2, bias=False)
+class CustomSpatialAttention(nn.Module):
+    def __init__(self, kernel_size=7, debug=False):
+        """
+        Custom Spatial Attention module with dynamic channel handling,
+        restoration convolution, and optional debugging.
+
+        Args:
+            kernel_size (int): Size of the convolution kernel (must be 3 or 7).
+            debug (bool): If True, prints debug information during forward pass.
+        """
+        super(CustomSpatialAttention, self).__init__()
+        self.debug = debug
+        if self.debug:
+            print(f"++++++++ Initializing CustomSpatialAttention with kernel_size={kernel_size}")
+        
+        assert kernel_size in {3, 7}, "kernel size must be 3 or 7"
+        padding = 3 if kernel_size == 7 else 1
+
+        # Define the attention mechanism
+        self.conv = nn.Conv2d(2, 1, kernel_size=kernel_size, padding=padding, bias=False)
         self.sigmoid = nn.Sigmoid()
 
-        # Add a conv layer to restore the number of channels after attention
-        self.restore_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        # Placeholder for restore_conv to allow dynamic initialization
+        self.restore_conv = None
 
     def forward(self, x):
-        avg_out = torch.mean(x, dim=1, keepdim=True)  # Average pooling
-        max_out, _ = torch.max(x, dim=1, keepdim=True)  # Max pooling
-        attention_map = torch.cat([avg_out, max_out], dim=1)  # Concatenate along channel dimension
-        attention_map = self.conv(attention_map)  # 2 channels -> 1 channel
-        attention_map = self.sigmoid(attention_map)  # Apply sigmoid to get the attention map
+        if self.debug:
+            print(f"Input shape to CustomSpatialAttention: {x.shape}")
         
-        # Element-wise multiply the attention map with the original input (broadcasting across channels)
+        # Compute mean and max attention descriptors
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        attention_map = torch.cat([avg_out, max_out], dim=1)
+    
+        # Generate attention map
+        attention_map = self.conv(attention_map).to(x.device)
+        attention_map = self.sigmoid(attention_map).to(x.device)
+    
+        # Dynamically create restore_conv if it doesn't exist
+        if self.restore_conv is None:
+            in_channels = x.size(1)  # Get number of channels from input
+            self.restore_conv = nn.Sequential(
+                nn.Conv2d(in_channels, in_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(in_channels)  # Add normalization for stability
+            )
+            nn.init.kaiming_normal_(self.restore_conv[0].weight, mode='fan_out', nonlinearity='relu')
+            
+        # Ensure restore_conv matches the input device and type
+        self.restore_conv = self.restore_conv.to(x.device).type(x.dtype)
+
+        # Apply attention map and restore channels
         x = x * attention_map
-        
-        # Pass through a 1x1 convolution to restore the original number of channels
         x = self.restore_conv(x)
-
+        if self.debug:
+            print(f"Output shape from CustomSpatialAttention: {x.shape}")
         return x
-
 
 class SelfAttention(nn.Module):
     def __init__(self, in_channels):
@@ -86,18 +118,16 @@ class SelfAttention(nn.Module):
 
     def forward(self, x):
         batch, channels, height, width = x.size()
+        print(f"Input shape to SelfAttention: {x.shape}")
         proj_query = self.query(x).view(batch, -1, width * height).permute(0, 2, 1)
         proj_key = self.key(x).view(batch, -1, width * height)
         energy = torch.bmm(proj_query, proj_key)
         attention = self.softmax(energy)
         proj_value = self.value(x).view(batch, -1, width * height)
-
         out = torch.bmm(proj_value, attention.permute(0, 2, 1))
         out = out.view(batch, channels, height, width)
-
+        print(f"Output shape to SelfAttention: {x.shape}")
         return out + x  # Residual connection
-
-
 
 class SobelFilter(nn.Module):
     def __init__(self):

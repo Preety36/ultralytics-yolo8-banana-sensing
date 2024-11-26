@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+from ultralytics.nn.modules import CustomSpatialAttention
 
 from ultralytics.nn.modules import (
     AIFI,
@@ -56,7 +57,7 @@ from ultralytics.nn.modules import (
     WorldDetect,
     v10Detect,
     SobelFilter,
-    SpatialAttention,
+    CustomSpatialAttention,
     SelfAttention,
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
@@ -905,16 +906,23 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
         m = getattr(torch.nn, m[3:]) if "nn." in m else globals()[m]  # get module
-        if m == "SpatialAttention":
-            m = SpatialAttention
-        elif m == "SelfAttention":
-            m = SelfAttention
         for j, a in enumerate(args):
             if isinstance(a, str):
                 with contextlib.suppress(ValueError):
                     args[j] = locals()[a] if a in locals() else ast.literal_eval(a)
 
         n = n_ = max(round(n * depth), 1) if n > 1 else n  # depth gain
+        
+        if m == "CustomSpatialAttention":
+            print(f"Before modification, args: {args}")
+            m = CustomSpatialAttention
+            in_channels = ch[f]
+            kernel_size = args[0]
+            assert kernel_size in {3, 7}, f"Invalid kernel size {kernel_size} for CustomSpatialAttention"
+            args = [in_channels, kernel_size]
+            print(f"After modification, args: {args}")
+            print(f"++++++++ CustomSpatialAttention Initializing {m} with args: {args}")
+            args = [ch[f], *args]  # Add input channels to args
         if m in {
             Classify,
             Conv,
@@ -989,7 +997,12 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
         else:
             c2 = ch[f]
 
-        m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
+        if m == CustomSpatialAttention:
+          m_ = CustomSpatialAttention(*args) 
+        else:
+          m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
+        
+        # m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
         t = str(m)[8:-2].replace("__main__.", "")  # module type
         m.np = sum(x.numel() for x in m_.parameters())  # number params
         m_.i, m_.f, m_.type = i, f, t  # attach index, 'from' index, type
